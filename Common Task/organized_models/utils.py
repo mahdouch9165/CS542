@@ -2,6 +2,9 @@ import os
 import random
 import time
 
+import pandas as pd
+import re
+
 from selenium import webdriver
 from selenium.common import TimeoutException, NoSuchElementException, StaleElementReferenceException, \
     NoSuchWindowException
@@ -99,6 +102,10 @@ def daily_data_listing(driver):
     return
 
 def daily_data_listing_por(driver, symbol):
+    url = "https://scacis.rcc-acis.org/"
+    
+    driver.get(url)
+    
     # initial routine 
     daily_data_listing(driver)
     
@@ -125,9 +132,15 @@ def daily_data_listing_por(driver, symbol):
 
     csv_content = get_csv_content(driver)
     
+    driver.quit()
+    
     return csv_content
 
 def daily_data_listing_7_day(driver, symbol):
+    url = "https://scacis.rcc-acis.org/"
+    
+    driver.get(url)
+    
     # initial routine 
     daily_data_listing(driver)
     
@@ -153,6 +166,8 @@ def daily_data_listing_7_day(driver, symbol):
     accept_pop_up(driver)
 
     csv_content = get_csv_content(driver)
+    
+    driver.quit()
     
     return csv_content
 
@@ -210,10 +225,33 @@ def get_csv_content(driver):
     # Get the text content of the <pre> element
     csv_content = csv_data.get_attribute('textContent')
 
-    # Split the CSV content by newline characters
-    csv_lines = csv_content.split('\n')
+    return csv_content
 
-    return csv_lines
+def process_daily_data_noaa_csv(csv_content):
+    pattern = re.compile(r'(\d{4}-\d{2}-\d{2})')
+    corrected_content = re.sub(pattern, r'\n\1', csv_content)
+    corrected_list = corrected_content.split('\n')
+    
+    # The first line has the clumn names and the title
+    first_line = corrected_list.pop(0)
+    column_names = first_line.split(', ')
+    column_names.pop(0)
+    # rename the first column name to 'Date'
+    column_names[0] = 'Date'
+    
+    # The rest of the lines are the data
+    data = []
+    for line in corrected_list:
+        data.append(line.split(', '))
+        
+    df = pd.DataFrame(data, columns=column_names)
+    df['Date'] = pd.to_datetime(df['Date'])
+    
+    # For other columns try to convert to numeric
+    for column in df.columns[1:]:  # Skip the first column ('Date')
+        df[column] = pd.to_numeric(df[column], errors='coerce')
+    
+    return df
 
 # Station Info:
 # Chicago - KMDW, Elev: 617.0 ft; Lat: 41.78417, Lon: -87.75528
@@ -245,5 +283,18 @@ def C_to_F(C):
 # If they exist the code will read them and see which days are missing and then download the missing days from the NOAA API.
 # If the files do not exist, the code will download all the data from the NOAA API.
 def update_noaa_data():
-    # print current working directory
     data_path = "./data"
+    # Get city dict
+    city_info = get_city_info()
+    # city_list
+    city_list = list(city_info.keys())
+    # for each city in city_list, look in the data folder for the file
+    for city in city_list:
+        city_file = f"{data_path}/{city}_NOAA.csv"
+        city_station_id = city_info[city]["station"]
+        driver = get_webdriver()
+        # if the file does not exist, download the noaa data
+        csv_content = daily_data_listing_por(driver, city_station_id)
+        df = process_daily_data_noaa_csv(csv_content)
+        df.to_csv(city_file, index=False)
+        # Ideally we would append the new data to the existing file, but for now we will overwrite it (does not take too long (4min))
