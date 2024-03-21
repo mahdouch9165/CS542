@@ -11,7 +11,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.chrome.options import Options
 
-# Webdriver code adapted from
+# Webdriver code (get_webdriver, and safe_find_element) adapted from
 # @misc{dong2024fnspid,
 #       title={FNSPID: A Comprehensive Financial News Dataset in Time Series}, 
 #       author={Zihan Dong and Xinyu Fan and Zhiyuan Peng},
@@ -20,6 +20,7 @@ from selenium.webdriver.chrome.options import Options
 #       archivePrefix={arXiv},
 #       primaryClass={q-fin.ST}
 # }
+# Remaining code is original work.
 def get_webdriver():
     user_agents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.36",
@@ -72,6 +73,147 @@ def safe_click(driver, by, value):
             EC.element_to_be_clickable((by, value))
         )
         element.click()
+
+def daily_data_listing(driver):
+    # Click on the "Single-Station Products" menu
+    single_station_menu = safe_find_element(driver, By.ID, 'single')
+    safe_click(driver, By.ID, 'single')
+
+    # Wait for the menu to expand and be clickable
+    daily_data_listing = WebDriverWait(driver, 15).until(
+        EC.element_to_be_clickable((By.ID, 'ui-id-4'))
+    )
+    safe_click(driver, By.ID, 'ui-id-4')
+
+    # Select the output format
+    csv_label = WebDriverWait(driver, 10).until(
+    EC.element_to_be_clickable((By.CSS_SELECTOR, 'label[for="outopt_csv"]'))
+    )
+    csv_label = safe_find_element(driver, By.CSS_SELECTOR, 'label[for="outopt_csv"]')
+    #safe_click(driver, By.CSS_SELECTOR, 'label[for="outopt_csv"]')
+    driver.execute_script("arguments[0].click();", csv_label)
+    
+    # Click on the calendar icon to open the date range picker
+    calendar_icon = safe_find_element(driver, By.ID, 'dp_calicon')
+    safe_click(driver, By.ID, 'dp_calicon')
+    return
+
+def daily_data_listing_por(driver, symbol):
+    # initial routine 
+    daily_data_listing(driver)
+    
+    # Wait for the date range picker to be visible
+    date_range_picker = WebDriverWait(driver, 15).until(
+        EC.visibility_of_element_located((By.CSS_SELECTOR, '.ui-daterangepicker'))
+    )
+
+    # Click on the "Period of Record" option
+    period_of_record = safe_find_element(driver, By.CSS_SELECTOR, '.ui-daterangepicker-PeriodofRecord')
+    safe_click(driver, By.CSS_SELECTOR, '.ui-daterangepicker-PeriodofRecord')
+
+    # Click on the checkboxes
+    click_all_checkboxes(driver)
+
+    # Put the symbol in the input box
+    input_symbol(driver, symbol)
+
+    # Click the "Go" button
+    click_go(driver)
+
+    # accept the pop up
+    accept_pop_up(driver)
+
+    csv_content = get_csv_content(driver)
+    
+    return csv_content
+
+def daily_data_listing_7_day(driver, symbol):
+    # initial routine 
+    daily_data_listing(driver)
+    
+    # Wait for the date range picker to be visible
+    date_range_picker = WebDriverWait(driver, 15).until(
+        EC.visibility_of_element_located((By.CSS_SELECTOR, '.ui-daterangepicker'))
+    )
+
+    # Click on the "Period of Record" option
+    period_of_record = safe_find_element(driver, By.CSS_SELECTOR, '.ui-daterangepicker-Last7Days')
+    safe_click(driver, By.CSS_SELECTOR, '.ui-daterangepicker-Last7Days')
+
+    # Click on the checkboxes
+    click_all_checkboxes(driver)
+
+    # Put the symbol in the input box
+    input_symbol(driver, symbol)
+
+    # Click the "Go" button
+    click_go(driver)
+
+    # accept the pop up
+    accept_pop_up(driver)
+
+    csv_content = get_csv_content(driver)
+    
+    return csv_content
+
+def input_symbol(driver, symbol):
+    # Assuming `station_select_menu` is the correct trigger element
+    station_select_menu = safe_find_element(driver, By.ID, 'station_acc')
+    driver.execute_script("arguments[0].click();", station_select_menu)
+    
+    # Wait for the station select input field to be visible (instead of just present)
+    station_select = WebDriverWait(driver, 15).until(
+        EC.visibility_of_element_located((By.CSS_SELECTOR, '.acis-idContainer input[type="text"]'))
+    )
+
+    # Clear the existing value and input the symbol
+    station_select.clear()
+    station_select.send_keys(symbol)
+
+def click_all_checkboxes(driver):
+    # Find all the checkboxes within the table
+    checkboxes = driver.find_elements(By.CSS_SELECTOR, '.acis-multiInputTable input[type="checkbox"]')
+    
+    # Click each checkbox using JavaScript
+    for checkbox in checkboxes:
+        if not checkbox.is_selected():
+            driver.execute_script("arguments[0].click();", checkbox)
+
+    time.sleep(2)  # Pause for 2 seconds to allow the checkboxes to be clicked
+
+def click_go(driver):
+    go_button = safe_find_element(driver, By.ID, 'go')
+    safe_click(driver, By.ID, 'go')
+
+def accept_pop_up(driver):
+    try:
+        # Wait for the alert to be present
+        WebDriverWait(driver, 5).until(EC.alert_is_present())
+        
+        # Switch to the alert and accept it
+        alert = driver.switch_to.alert
+        alert.accept()
+        
+        #print("Pop-up alert accepted.")
+    except TimeoutException:
+        # Handle the case where the alert does not appear within 5 seconds
+        #print("No pop-up alert to accept.")
+        # do nothing
+        pass
+
+def get_csv_content(driver):
+    # Wait for the CSV data to be present in the results_area
+    csv_data = WebDriverWait(driver, 60).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, '#results_area pre'))
+    )
+
+    # Get the text content of the <pre> element
+    csv_content = csv_data.get_attribute('textContent')
+
+    # Split the CSV content by newline characters
+    csv_lines = csv_content.split('\n')
+
+    return csv_lines
 
 # Station Info:
 # Chicago - KMDW, Elev: 617.0 ft; Lat: 41.78417, Lon: -87.75528
