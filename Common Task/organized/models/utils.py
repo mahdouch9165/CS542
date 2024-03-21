@@ -112,3 +112,39 @@ def update_df_solo(old_df):
     df = df.dropna()
     
     return df, last_row
+
+def update_df_solo_v2(old_df):
+    df = old_df.copy()
+
+    # cycle features
+    df['day'] = df['date'].dt.day
+    df['month'] = df['date'].dt.month
+    df['year'] = df['date'].dt.year
+    df['day_of_year'] = df['date'].dt.dayofyear
+    df['sin_day'] = np.sin(2 * np.pi * df['day_of_year']/365)
+    df['cos_day'] = np.cos(2 * np.pi * df['day_of_year']/365)
+    
+    # drop AtObsTemperature
+    df = df.drop(columns=['atobstemperature', 'snowdepth'])
+    
+    df['precipitation'] = df['precipitationnormal'] + df['precipitationdeparture']
+    df['snowfall'] = df['snowfallnormal'] + df['snowfalldeparture']
+    
+    # Carry future values.
+    df['next_day_max_temp_normal'] = df['maxtemperaturenormal'].shift(-1)
+    df['next_day_min_temp_normal'] = df['mintemperaturenormal'].shift(-1)
+    df['next_day_avg_temp_normal'] = df['avgtemperaturenormal'].shift(-1)
+    df['next_day_precipitation_normal'] = df['precipitationnormal'].shift(-1)
+    df['next_day_CDD_normal'] = df['cddnormal'].shift(-1)
+    df['next_day_HDD_normal'] = df['hddnormal'].shift(-1)
+    
+    # Target 
+    df['next_day_max_temp'] = df['maxtemperature'].shift(-1)
+    
+    # drop the final row
+    last_row = df.iloc[-2]
+    df = df[:-2]
+    
+    df = df.dropna()
+    
+    return df, last_row
