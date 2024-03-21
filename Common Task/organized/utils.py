@@ -303,3 +303,180 @@ def update_noaa_data():
         df = pd.concat([df, df_new.tail(1)], ignore_index=True)
         df.to_csv(city_file, index=False)
         # Ideally we would append the new data to the existing file, but for now we will overwrite it (does not take too long (4min))
+        
+# Data source 2:
+# OpenMeteo
+# Will be used to fill in the gaps in the NOAA data
+
+import openmeteo_requests
+import requests_cache
+from retry_requests import retry
+
+def update_OM_data():
+    # Setup the Open-Meteo API client with cache and retry on error
+    cache_session = requests_cache.CachedSession('.cache', expire_after=-1)
+    retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
+    openmeteo = openmeteo_requests.Client(session=retry_session)
+    
+    def get_historical_data(latitude, longitude, start_date, end_date):
+        url = "https://archive-api.open-meteo.com/v1/archive"
+        params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "start_date": start_date,
+            "end_date": end_date,
+            "daily": ["weather_code", "temperature_2m_max", "temperature_2m_min", "apparent_temperature_max", "apparent_temperature_min", "sunrise", "sunset", "daylight_duration", "sunshine_duration", "precipitation_sum", "rain_sum", "snowfall_sum", "precipitation_hours", "wind_speed_10m_max", "wind_gusts_10m_max", "wind_direction_10m_dominant", "shortwave_radiation_sum", "et0_fao_evapotranspiration"],
+            "temperature_unit": "fahrenheit"
+        }
+        responses = openmeteo.weather_api(url, params=params)
+        response = responses[0]
+        
+        daily = response.Daily()
+        daily_weather_code = daily.Variables(0).ValuesAsNumpy()
+        daily_temperature_2m_max = daily.Variables(1).ValuesAsNumpy()
+        daily_temperature_2m_min = daily.Variables(2).ValuesAsNumpy()
+        daily_apparent_temperature_max = daily.Variables(3).ValuesAsNumpy()
+        daily_apparent_temperature_min = daily.Variables(4).ValuesAsNumpy()
+        daily_sunrise = daily.Variables(5).ValuesAsNumpy()
+        daily_sunset = daily.Variables(6).ValuesAsNumpy()
+        daily_daylight_duration = daily.Variables(7).ValuesAsNumpy()
+        daily_sunshine_duration = daily.Variables(8).ValuesAsNumpy()
+        daily_precipitation_sum = daily.Variables(9).ValuesAsNumpy()
+        daily_rain_sum = daily.Variables(10).ValuesAsNumpy()
+        daily_snowfall_sum = daily.Variables(11).ValuesAsNumpy()
+        daily_precipitation_hours = daily.Variables(12).ValuesAsNumpy()
+        daily_wind_speed_10m_max = daily.Variables(13).ValuesAsNumpy()
+        daily_wind_gusts_10m_max = daily.Variables(14).ValuesAsNumpy()
+        daily_wind_direction_10m_dominant = daily.Variables(15).ValuesAsNumpy()
+        daily_shortwave_radiation_sum = daily.Variables(16).ValuesAsNumpy()
+        daily_et0_fao_evapotranspiration = daily.Variables(17).ValuesAsNumpy()
+        
+        daily_data = {"date": pd.date_range(
+            start = pd.to_datetime(daily.Time(), unit = "s", utc = True),
+            end = pd.to_datetime(daily.TimeEnd(), unit = "s", utc = True),
+            freq = pd.Timedelta(seconds = daily.Interval()),
+            inclusive = "left"
+        )}
+        daily_data["weather_code"] = daily_weather_code
+        daily_data["temperature_2m_max"] = daily_temperature_2m_max
+        daily_data["temperature_2m_min"] = daily_temperature_2m_min
+        daily_data["apparent_temperature_max"] = daily_apparent_temperature_max
+        daily_data["apparent_temperature_min"] = daily_apparent_temperature_min
+        daily_data["sunrise"] = daily_sunrise
+        daily_data["sunset"] = daily_sunset
+        daily_data["daylight_duration"] = daily_daylight_duration
+        daily_data["sunshine_duration"] = daily_sunshine_duration
+        daily_data["precipitation_sum"] = daily_precipitation_sum
+        daily_data["rain_sum"] = daily_rain_sum
+        daily_data["snowfall_sum"] = daily_snowfall_sum
+        daily_data["precipitation_hours"] = daily_precipitation_hours
+        daily_data["wind_speed_10m_max"] = daily_wind_speed_10m_max
+        daily_data["wind_gusts_10m_max"] = daily_wind_gusts_10m_max
+        daily_data["wind_direction_10m_dominant"] = daily_wind_direction_10m_dominant
+        daily_data["shortwave_radiation_sum"] = daily_shortwave_radiation_sum
+        daily_data["et0_fao_evapotranspiration"] = daily_et0_fao_evapotranspiration
+        
+        return pd.DataFrame(data=daily_data)
+
+    def get_forecast_data(latitude, longitude):
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "hourly": "temperature_2m",
+            "daily": ["weather_code", "temperature_2m_max", "temperature_2m_min", "apparent_temperature_max", "apparent_temperature_min", "sunrise", "sunset", "daylight_duration", "sunshine_duration", "precipitation_sum", "rain_sum", "snowfall_sum", "precipitation_hours", "wind_speed_10m_max", "wind_gusts_10m_max", "wind_direction_10m_dominant", "shortwave_radiation_sum", "et0_fao_evapotranspiration"],
+            "temperature_unit": "fahrenheit",
+            "past_days": 1,
+            "forecast_days": 0
+        }
+        responses = openmeteo.weather_api(url, params=params)
+        response = responses[0]
+        
+        hourly = response.Hourly()
+        hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
+        
+        hourly_data = {"date": pd.date_range(
+            start = pd.to_datetime(hourly.Time(), unit = "s", utc = True),
+            end = pd.to_datetime(hourly.TimeEnd(), unit = "s", utc = True),
+            freq = pd.Timedelta(seconds = hourly.Interval()),
+            inclusive = "left"
+        )}
+        hourly_data["temperature_2m"] = hourly_temperature_2m
+        
+        hourly_dataframe = pd.DataFrame(data=hourly_data)
+        
+        daily = response.Daily()
+        daily_weather_code = daily.Variables(0).ValuesAsNumpy()
+        daily_temperature_2m_max = daily.Variables(1).ValuesAsNumpy()
+        daily_temperature_2m_min = daily.Variables(2).ValuesAsNumpy()
+        daily_apparent_temperature_max = daily.Variables(3).ValuesAsNumpy()
+        daily_apparent_temperature_min = daily.Variables(4).ValuesAsNumpy()
+        daily_sunrise = daily.Variables(5).ValuesAsNumpy()
+        daily_sunset = daily.Variables(6).ValuesAsNumpy()
+        daily_daylight_duration = daily.Variables(7).ValuesAsNumpy()
+        daily_sunshine_duration = daily.Variables(8).ValuesAsNumpy()
+        daily_precipitation_sum = daily.Variables(9).ValuesAsNumpy()
+        daily_rain_sum = daily.Variables(10).ValuesAsNumpy()
+        daily_snowfall_sum = daily.Variables(11).ValuesAsNumpy()
+        daily_precipitation_hours = daily.Variables(12).ValuesAsNumpy()
+        daily_wind_speed_10m_max = daily.Variables(13).ValuesAsNumpy()
+        daily_wind_gusts_10m_max = daily.Variables(14).ValuesAsNumpy()
+        daily_wind_direction_10m_dominant = daily.Variables(15).ValuesAsNumpy()
+        daily_shortwave_radiation_sum = daily.Variables(16).ValuesAsNumpy()
+        daily_et0_fao_evapotranspiration = daily.Variables(17).ValuesAsNumpy()
+        
+        daily_data = {"date": pd.date_range(
+            start = pd.to_datetime(daily.Time(), unit = "s", utc = True),
+            end = pd.to_datetime(daily.TimeEnd(), unit = "s", utc = True),
+            freq = pd.Timedelta(seconds = daily.Interval()),
+            inclusive = "left"
+        )}
+        daily_data["weather_code"] = daily_weather_code
+        daily_data["temperature_2m_max"] = daily_temperature_2m_max
+        daily_data["temperature_2m_min"] = daily_temperature_2m_min
+        daily_data["apparent_temperature_max"] = daily_apparent_temperature_max
+        daily_data["apparent_temperature_min"] = daily_apparent_temperature_min
+        daily_data["sunrise"] = daily_sunrise
+        daily_data["sunset"] = daily_sunset
+        daily_data["daylight_duration"] = daily_daylight_duration
+        daily_data["sunshine_duration"] = daily_sunshine_duration
+        daily_data["precipitation_sum"] = daily_precipitation_sum
+        daily_data["rain_sum"] = daily_rain_sum
+        daily_data["snowfall_sum"] = daily_snowfall_sum
+        daily_data["precipitation_hours"] = daily_precipitation_hours
+        daily_data["wind_speed_10m_max"] = daily_wind_speed_10m_max
+        daily_data["wind_gusts_10m_max"] = daily_wind_gusts_10m_max
+        daily_data["wind_direction_10m_dominant"] = daily_wind_direction_10m_dominant
+        daily_data["shortwave_radiation_sum"] = daily_shortwave_radiation_sum
+        daily_data["et0_fao_evapotranspiration"] = daily_et0_fao_evapotranspiration
+        
+        daily_dataframe = pd.DataFrame(data=daily_data)
+        
+        return hourly_dataframe, daily_dataframe
+
+    # Example usage
+    data_path = "./data"
+    # Get city dict
+    city_info = get_city_info()
+    # city_list
+    city_list = list(city_info.keys())
+    
+    for city in city_list:
+        city_file = f"{data_path}/{city}_OM.csv"
+        latitude = city_info[city]["lat"]
+        longitude = city_info[city]["lon"]
+        start_date = "1940-01-01"
+        end_date = pd.to_datetime("now") - pd.Timedelta(days=1)
+        end_date = end_date.strftime("%Y-%m-%d")
+
+        historical_data = get_historical_data(latitude, longitude, start_date, end_date)
+        
+        time.sleep(60)
+        
+        forecast_hourly_data, forecast_daily_data = get_forecast_data(latitude, longitude)
+        
+        combined_daily_data = pd.concat([historical_data, forecast_daily_data], ignore_index=True)
+
+        combined_daily_data.to_csv(city_file, index=False)
+        
+        time.sleep(60)
