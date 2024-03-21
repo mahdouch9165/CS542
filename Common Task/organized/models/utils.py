@@ -92,6 +92,16 @@ def update_df_solo(old_df):
     # drop AtObsTemperature
     df = df.drop(columns=['atobstemperature', 'snowfallnormal', 'snowfalldeparture', 'snowdepth', 'avgtemperature', 'avgtemperaturedeparture', 'cdd', 'hdddeparture', 'cdddeparture', 'gdd', 'hdd'])
     
+    df['precipitation'] = df['precipitationnormal'] + df['precipitationdeparture']
+    
+    # Carry future values.
+    df['next_day_max_temp_normal'] = df['maxtemperaturenormal'].shift(-1)
+    df['next_day_min_temp_normal'] = df['mintemperaturenormal'].shift(-1)
+    df['next_day_avg_temp_normal'] = df['avgtemperaturenormal'].shift(-1)
+    df['next_day_precipitation_normal'] = df['precipitationnormal'].shift(-1)
+    df['next_day_CDD_normal'] = df['cddnormal'].shift(-1)
+    df['next_day_HDD_normal'] = df['hddnormal'].shift(-1)
+    
     # Target 
     df['next_day_max_temp'] = df['maxtemperature'].shift(-1)
     
