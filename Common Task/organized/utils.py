@@ -13,6 +13,7 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 
 # Webdriver code (get_webdriver, and safe_find_element) adapted from
 # @misc{dong2024fnspid,
@@ -32,6 +33,10 @@ def get_webdriver():
     ]
     random_user_agent = random.choice(user_agents)
     options = Options()
+    options.set_capability("goog:loggingPrefs", {
+        'performance': 'ALL',
+        'browser': 'ALL'
+    })
     options.add_argument(f"user-agent={random_user_agent}")
     options.page_load_strategy = 'none'
     options.add_argument('--ignore-certificate-errors')
@@ -280,9 +285,9 @@ def C_to_F(C):
 # Expectation is for four stations to have a csv file for them under the data folder.
 # The csv files should be called:
 # KMDW_NOAA.csv, KNYC_NOAA.csv, KMIA_NOAA.csv, KAUS_NOAA.csv
-# If they exist the code will read them and see which days are missing and then download the missing days from the NOAA API.
+# If they exist tshe code will read them and see which days are missing and then download the missing days from the NOAA API.
 # If the files do not exist, the code will download all the data from the NOAA API.
-def update_noaa_data():
+def load_NOAA_data():
     data_path = "./data"
     # Get city dict
     city_info = get_city_info()
@@ -308,11 +313,33 @@ def update_noaa_data():
 # OpenMeteo
 # Will be used to fill in the gaps in the NOAA data
 
+def update_NOAA_data():
+    data_path = "./data"
+    # Get city dict
+    city_info = get_city_info()
+    # city_list
+    city_list = list(city_info.keys())
+    for city in city_list:
+        city_file = f"{data_path}/{city}_NOAA.csv"
+        city_station_id = city_info[city]["station"]
+        driver = get_webdriver()
+        csv_new_content = daily_data_listing_7_day(driver, city_station_id)
+        df_new = process_daily_data_noaa_csv(csv_new_content)
+        old_df = pd.read_csv(city_file)
+        last_date = old_df['Date'].iloc[-1]
+        new_df = df_new[df_new['Date'] > last_date]
+        today = pd.to_datetime("now").date().strftime("%Y-%m-%d")
+        # do not include today's data
+        new_df = new_df[new_df['Date'] < today]
+        # Add the last row of the new data to the historic data
+        df = pd.concat([old_df, new_df], ignore_index=True)
+        df.to_csv(city_file, index=False)
+
 import openmeteo_requests
 import requests_cache
 from retry_requests import retry
 
-def update_OM_data():
+def load_OM_data():
     # Setup the Open-Meteo API client with cache and retry on error
     cache_session = requests_cache.CachedSession('.cache', expire_after=-1)
     retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
@@ -479,4 +506,215 @@ def update_OM_data():
 
         combined_daily_data.to_csv(city_file, index=False)
         
-        time.sleep(60)
+        time.sleep(60)            
+
+def update_OM_data():
+        # Setup the Open-Meteo API client with cache and retry on error
+    cache_session = requests_cache.CachedSession('.cache', expire_after=-1)
+    retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
+    openmeteo = openmeteo_requests.Client(session=retry_session)
+    
+    def get_historical_data(latitude, longitude, start_date, end_date):
+        url = "https://archive-api.open-meteo.com/v1/archive"
+        params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "start_date": start_date,
+            "end_date": end_date,
+            "daily": ["weather_code", "temperature_2m_max", "temperature_2m_min", "apparent_temperature_max", "apparent_temperature_min", "sunrise", "sunset", "daylight_duration", "sunshine_duration", "precipitation_sum", "rain_sum", "snowfall_sum", "precipitation_hours", "wind_speed_10m_max", "wind_gusts_10m_max", "wind_direction_10m_dominant", "shortwave_radiation_sum", "et0_fao_evapotranspiration"],
+            "temperature_unit": "fahrenheit"
+        }
+        responses = openmeteo.weather_api(url, params=params)
+        response = responses[0]
+        
+        daily = response.Daily()
+        daily_weather_code = daily.Variables(0).ValuesAsNumpy()
+        daily_temperature_2m_max = daily.Variables(1).ValuesAsNumpy()
+        daily_temperature_2m_min = daily.Variables(2).ValuesAsNumpy()
+        daily_apparent_temperature_max = daily.Variables(3).ValuesAsNumpy()
+        daily_apparent_temperature_min = daily.Variables(4).ValuesAsNumpy()
+        daily_sunrise = daily.Variables(5).ValuesAsNumpy()
+        daily_sunset = daily.Variables(6).ValuesAsNumpy()
+        daily_daylight_duration = daily.Variables(7).ValuesAsNumpy()
+        daily_sunshine_duration = daily.Variables(8).ValuesAsNumpy()
+        daily_precipitation_sum = daily.Variables(9).ValuesAsNumpy()
+        daily_rain_sum = daily.Variables(10).ValuesAsNumpy()
+        daily_snowfall_sum = daily.Variables(11).ValuesAsNumpy()
+        daily_precipitation_hours = daily.Variables(12).ValuesAsNumpy()
+        daily_wind_speed_10m_max = daily.Variables(13).ValuesAsNumpy()
+        daily_wind_gusts_10m_max = daily.Variables(14).ValuesAsNumpy()
+        daily_wind_direction_10m_dominant = daily.Variables(15).ValuesAsNumpy()
+        daily_shortwave_radiation_sum = daily.Variables(16).ValuesAsNumpy()
+        daily_et0_fao_evapotranspiration = daily.Variables(17).ValuesAsNumpy()
+        
+        daily_data = {"date": pd.date_range(
+            start = pd.to_datetime(daily.Time(), unit = "s", utc = True),
+            end = pd.to_datetime(daily.TimeEnd(), unit = "s", utc = True),
+            freq = pd.Timedelta(seconds = daily.Interval()),
+            inclusive = "left"
+        )}
+        daily_data["weather_code"] = daily_weather_code
+        daily_data["temperature_2m_max"] = daily_temperature_2m_max
+        daily_data["temperature_2m_min"] = daily_temperature_2m_min
+        daily_data["apparent_temperature_max"] = daily_apparent_temperature_max
+        daily_data["apparent_temperature_min"] = daily_apparent_temperature_min
+        daily_data["sunrise"] = daily_sunrise
+        daily_data["sunset"] = daily_sunset
+        daily_data["daylight_duration"] = daily_daylight_duration
+        daily_data["sunshine_duration"] = daily_sunshine_duration
+        daily_data["precipitation_sum"] = daily_precipitation_sum
+        daily_data["rain_sum"] = daily_rain_sum
+        daily_data["snowfall_sum"] = daily_snowfall_sum
+        daily_data["precipitation_hours"] = daily_precipitation_hours
+        daily_data["wind_speed_10m_max"] = daily_wind_speed_10m_max
+        daily_data["wind_gusts_10m_max"] = daily_wind_gusts_10m_max
+        daily_data["wind_direction_10m_dominant"] = daily_wind_direction_10m_dominant
+        daily_data["shortwave_radiation_sum"] = daily_shortwave_radiation_sum
+        daily_data["et0_fao_evapotranspiration"] = daily_et0_fao_evapotranspiration
+        
+        return pd.DataFrame(data=daily_data)
+
+    # Example usage
+    data_path = "./data"
+    # Get city dict
+    city_info = get_city_info()
+    # city_list
+    city_list = list(city_info.keys())
+    
+    for city in city_list:
+        city_file = f"{data_path}/{city}_OM.csv"
+        latitude = city_info[city]["lat"]
+        longitude = city_info[city]["lon"]
+        
+        old_df = pd.read_csv(city_file)
+        old_df['date'] = pd.to_datetime(old_df['date'])
+        last_date = old_df['date'].iloc[-1]
+        
+        start_date = last_date + pd.Timedelta(days=1)
+        start_date = start_date.strftime("%Y-%m-%d")
+        
+        end_date = pd.to_datetime("now") - pd.Timedelta(days=1)
+        end_date = end_date.strftime("%Y-%m-%d")
+        
+        historical_data = get_historical_data(latitude, longitude, start_date, end_date)
+        
+        combined_daily_data = pd.concat([old_df, historical_data], ignore_index=True)
+        
+        new_city_file = f"{data_path}/{city}_OM.csv"
+        
+        combined_daily_data.to_csv(new_city_file, index=False)
+        
+        time.sleep(30)
+        
+from meteostat import Stations, Daily
+from datetime import datetime
+
+def load_MS_data():
+    city_info = get_city_info()
+    start = datetime(1869,1,1)
+    end = datetime(2024,3,20)
+
+    for key in city_info.keys():
+        city = city_info[key]
+        station_id = city['station']
+        lat = city['lat']
+        lon = city['lon']
+        elev = city['elev']
+        
+        stations = Stations()
+        nearby = stations.nearby(lat, lon)
+        nearest = nearby.fetch(1)
+        sid = nearest.index[0]
+        
+        data = Daily(sid, start, end)
+        data = data.fetch()
+        
+        # save data
+        data.to_csv(f'../data/{key}_MS.csv')
+      
+import json
+import requests
+        
+def load_WRH_data():
+    data_path = "./data"
+    # Get city dict
+    city_info = get_city_info()
+    # city_list
+    city_list = list(city_info.keys())
+    for city in city_list:
+        city_file = f"{data_path}/{city}_WRH.csv"
+        city_station_id = city_info[city]["station"]
+        url = f"https://www.weather.gov/wrh/timeseries?site={city_station_id}"
+        driver = get_webdriver()
+        driver.get(url)
+        time.sleep(15)
+        logs = driver.get_log('performance')
+        urls = []
+        for entry in logs:
+            message = entry['message']
+            if 'token' in message.lower():
+                entry = json.loads(message)
+                try:
+                    url = entry['message']['params']['request']['url']
+                except:
+                    continue
+                urls.append(url)
+        # extract the token from the url
+        token = urls[0].split('token=')[1].split('&')[0]
+        start = '200207140000'
+        # end date is today
+        end = pd.to_datetime("now").strftime("%Y%m%d%H%M")
+        url_form = f'https://api.mesowest.net/v2/stations/timeseries?STID={city_station_id}&showemptystations=1&units=temp|F,speed|mph,english&start={start}&end={end}&token={token}&complete=1&obtimezone=local'
+        response = requests.get(url_form)
+        data = response.json()
+        observations = data['STATION'][0]['OBSERVATIONS']
+        df = pd.DataFrame(observations)
+        df.to_csv(city_file, index=False)
+        driver.quit()
+        
+def update_WRH_data():
+    data_path = "./data"
+    # Get city dict
+    city_info = get_city_info()
+    # city_list
+    city_list = list(city_info.keys())
+    for city in city_list:
+        city_file = f"{data_path}/{city}_WRH.csv"
+        city_station_id = city_info[city]["station"]
+        url = f"https://www.weather.gov/wrh/timeseries?site={city_station_id}"
+        driver = get_webdriver()
+        driver.get(url)
+        time.sleep(15)
+        logs = driver.get_log('performance')
+        urls = []
+        for entry in logs:
+            message = entry['message']
+            if 'token' in message.lower():
+                entry = json.loads(message)
+                try:
+                    url = entry['message']['params']['request']['url']
+                except:
+                    continue
+                urls.append(url)
+        # extract the token from the url
+        token = urls[0].split('token=')[1].split('&')[0]
+        # Load the existing data
+        old_df = pd.read_csv(city_file)
+        old_df['date_time'] = pd.to_datetime(old_df['date_time'])
+        start = old_df['date_time'].iloc[-1].strftime("%Y%m%d") + '0000'
+        # end date is today
+        end = pd.to_datetime("now").strftime("%Y%m%d%H%M")
+        url_form = f'https://api.mesowest.net/v2/stations/timeseries?STID={city_station_id}&showemptystations=1&units=temp|F,speed|mph,english&start={start}&end={end}&token={token}&complete=1&obtimezone=local'
+        response = requests.get(url_form)
+        data = response.json()
+        observations = data['STATION'][0]['OBSERVATIONS']
+        df = pd.DataFrame(observations)
+        df['date_time'] = pd.to_datetime(df['date_time'])
+        last_date = old_df['date_time'].iloc[-1]
+        new_df = df[df['date_time'] > last_date]
+        # new_df must not include today's data (only compare the date part)
+        today = pd.to_datetime("now").date()
+        new_df = new_df[new_df['date_time'].dt.date < today]        
+        new_df = pd.concat([old_df, new_df], ignore_index=True)   
+        new_df.to_csv(city_file, index=False)
+        driver.quit()
