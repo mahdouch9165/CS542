@@ -2,11 +2,100 @@ import numpy as np
 import pandas as pd
 
 def get_city_info():
+    # Austin
+    noaa_austin_path = './data/Austin_NOAA.csv'
+    om_austin_path = './data/Austin_OM.csv'
+    wrh_austin_path = './data/Austin_WRH.csv'
+    air_austin_path = './data/Austin_Air_Quality.csv'
+    solar_austin_path = './data/Austin_Solar_Soil.csv'
+    attn_lstm_autin_path = './models/weights/Austin_attn_lstm.pt'
+    lstm_austin_path = './models/weights/Austin_lstm.pt'
+    scaler_austin_path = './models/weights/Austin_scaler_features.pkl'
+    # NYC
+    noaa_nyc_path = './data/NYC_NOAA.csv'
+    om_nyc_path = './data/NYC_OM.csv'
+    wrh_nyc_path = './data/NYC_WRH.csv'
+    air_nyc_path = './data/NYC_Air_Quality.csv'
+    solar_nyc_path = './data/NYC_Solar_Soil.csv'
+    attn_nyc_path = './models/weights/NYC_attn_lstm.pt'
+    lstm_nyc_path = './models/weights/NYC_lstm.pt'
+    scaler_nyc_path = './models/weights/NYC_scaler_features.pkl'
+    # Miami
+    noaa_miami_path = './data/Miami_NOAA.csv'
+    om_miami_path = './data/Miami_OM.csv'
+    wrh_miami_path = './data/Miami_WRH.csv'
+    air_miami_path = './data/Miami_Air_Quality.csv'
+    solar_miami_path = './data/Miami_Solar_Soil.csv'
+    attn_lstm_miami_path = './models/weights/Miami_attn_lstm.pt'
+    lstm_miami_path = './models/weights/Miami_lstm.pt'
+    scaler_miami_path = './models/weights/Miami_scaler_features.pkl'
+    # Chicago
+    noaa_chicago_path = './data/Chicago_NOAA.csv'
+    om_chicago_path = './data/Chicago_OM.csv'
+    wrh_chicago_path = './data/Chicago_WRH.csv'
+    air_chicago_path = './data/Chicago_Air_Quality.csv'
+    solar_chicago_path = './data/Chicago_Solar_Soil.csv'   
+    attn_lstm_chicago_path = './models/weights/Chicago_attn_lstm.pt'
+    lstm_chicago_path = './models/weights/Chicago_lstm.pt'
+    scaler_chicago_path = './models/weights/Chicago_scaler_features.pkl'
+    
     info = {
-        "Chicago": {"station": "KMDW", "elev": 617.0, "lat": 41.78417, "lon": -87.75528, "tz": "America/Chicago"},
-        "NYC": {"station": "KNYC", "elev": 154.0, "lat": 40.78333, "lon": -73.96667, "tz": "America/New_York"},
-        "Miami": {"station": "KMIA", "elev": 10.0, "lat": 25.79056, "lon": -80.31639, "tz": "America/New_York"},
-        "Austin": {"station": "KAUS", "elev": 486.0, "lat": 30.18304, "lon": -97.67987, "tz": "America/Chicago"}
+        "Chicago": {
+            "station": "KMDW", 
+            "elev": 617.0, 
+            "lat": 41.78417, 
+            "lon": -87.75528, 
+            "tz": "America/Chicago",
+            "noaa": noaa_chicago_path,
+            "om": om_chicago_path,
+            "wrh": wrh_chicago_path,
+            "aq": air_chicago_path,
+            "ss": solar_chicago_path,
+            "attn_lstm": attn_lstm_chicago_path,
+            "lstm": lstm_chicago_path,
+            "scaler": scaler_chicago_path},
+        "NYC": {
+            "station": "KNYC",
+            "elev": 154.0,
+            "lat": 40.78333,
+            "lon": -73.96667,
+            "tz": "America/New_York",
+            "noaa": noaa_nyc_path,
+            "om": om_nyc_path,
+            "wrh": wrh_nyc_path,
+            "aq": air_nyc_path,
+            "ss": solar_nyc_path,
+            "attn_lstm": attn_nyc_path,
+            "lstm": lstm_nyc_path,
+            "scaler": scaler_nyc_path},
+        "Miami": {
+            "station": "KMIA", 
+            "elev": 10.0, 
+            "lat": 25.79056, 
+            "lon": -80.31639, 
+            "tz": "America/New_York",
+            "noaa": noaa_miami_path,
+            "om": om_miami_path,
+            "wrh": wrh_miami_path,
+            "aq": air_miami_path,
+            "ss": solar_miami_path,
+            "attn_lstm": attn_lstm_miami_path,
+            "lstm": lstm_miami_path,
+            "scaler": scaler_miami_path},
+        "Austin": {
+            "station": "KAUS", 
+            "elev": 486.0, 
+            "lat": 30.18304, 
+            "lon": -97.67987, 
+            "tz": "America/Chicago",
+            "noaa": noaa_austin_path,
+            "om": om_austin_path,
+            "wrh": wrh_austin_path,
+            "aq": air_austin_path,
+            "ss": solar_austin_path,
+            "attn_lstm": attn_lstm_autin_path,
+            "lstm": lstm_austin_path,
+            "scaler": scaler_austin_path}
     }
     return info
 
@@ -259,8 +348,14 @@ def all_merge(daily_1, daily_2, daily_3):
     daily_2 = daily_2.drop(columns=duplicate_columns)
     daily_3 = daily_3.drop(columns=duplicate_columns)
     # merge without dropping na
-    # fill na with 0
     merged = pd.merge(daily_1, daily_2, on='date', how='left')
+    # common columns between merged and daily_3
+    merged_columns = list(merged.columns)
+    daily_3_columns = list(daily_3.columns)
+    common_columns = list(set(merged_columns).intersection(daily_3_columns))
+    # remove ['date'] from common columns
+    common_columns.remove('date')
+    daily_3 = daily_3.drop(columns=common_columns)
     merged = pd.merge(merged, daily_3, on='date', how='left')
     merged = merged.fillna(0)
     return merged
