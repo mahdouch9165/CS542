@@ -354,6 +354,10 @@ def load_model(path):
     model = torch.load(path)
     return model
 
+def load_xgb(path):
+    model = joblib.load(path)
+    return model
+
 def load_scaler(path):
     scaler = joblib.load(path)
     return scaler
