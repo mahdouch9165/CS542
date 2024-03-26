@@ -68,43 +68,48 @@ def load_Air_Quality_df(path):
    return df
 
 def load_WRH_df(path):
-   df = pd.read_csv(path)
-   df.columns = df.columns.str.lower()
-   df = df.drop(columns=['cloud_layer_2_code_set_1', 'sea_level_pressure_set_1',
-      'cloud_layer_3_code_set_1', 'air_temp_high_6_hour_set_1',
-      'air_temp_low_6_hour_set_1', 'pressure_change_code_set_1',
-      'precip_accum_one_hour_set_1', 'weather_cond_code_set_1',
-      'precip_accum_six_hour_set_1', 'wind_gust_set_1',
-      'peak_wind_speed_set_1', 'pressure_tendency_set_1',
-      'precip_accum_24_hour_set_1', 'precip_accum_three_hour_set_1',
-      'snow_depth_set_1', 'air_temp_high_24_hour_set_1',
-      'air_temp_low_24_hour_set_1', 'ceiling_set_1',
-      'peak_wind_direction_set_1', 'dew_point_temperature_set_1',
-      'metar_origin_set_1', 'weather_condition_set_1d',
-      'cloud_layer_2_set_1d', 'cloud_layer_3_set_1d', 'wind_chill_set_1d',
-      'heat_index_set_1d', 'metar_set_1', 'cloud_layer_1_set_1d', 'weather_summary_set_1d'])
-   df['date_time'] = pd.to_datetime(df['date_time'], utc=True)
-   # relocalize to the correct timezone
-   city_name = path.split('/')[-1].split('_')[0]
-   timezone = get_time_zone(city_name)
-   # relocalize to the correct timezone
-   df['date_time'] = df['date_time'].dt.tz_convert(timezone)
-   df['date'] = df['date_time'].dt.date
-   df['time'] = df['date_time'].dt.time
-   df['year'] = df['date_time'].dt.year
-   df['month'] = df['date_time'].dt.month
-   df['day'] = df['date_time'].dt.day
-   df['hour'] = df['date_time'].dt.hour
-   df['minute'] = df['date_time'].dt.minute
-   df['second'] = df['date_time'].dt.second
-   df['day_of_year'] = df['date_time'].dt.dayofyear
-   # sin ad cos of the day of the year
-   df['sin_day'] = np.sin(2 * np.pi * df['day_of_year']/365)
-   df['cos_day'] = np.cos(2 * np.pi * df['day_of_year']/365)
-   columns_to_one_hot = ['wind_cardinal_direction_set_1d']
-   df = pd.get_dummies(df, columns=columns_to_one_hot, dtype=int)
-   df = df.dropna()
-   return df
+    df = pd.read_csv(path)
+    df.columns = df.columns.str.lower()
+    df = df.drop(columns=['cloud_layer_2_code_set_1', 'sea_level_pressure_set_1',
+        'cloud_layer_3_code_set_1', 'air_temp_high_6_hour_set_1',
+        'air_temp_low_6_hour_set_1', 'pressure_change_code_set_1',
+        'precip_accum_one_hour_set_1', 'weather_cond_code_set_1',
+        'precip_accum_six_hour_set_1', 'wind_gust_set_1',
+        'peak_wind_speed_set_1', 'pressure_tendency_set_1',
+        'precip_accum_24_hour_set_1', 'precip_accum_three_hour_set_1',
+        'snow_depth_set_1', 'air_temp_high_24_hour_set_1',
+        'air_temp_low_24_hour_set_1', 'ceiling_set_1',
+        'peak_wind_direction_set_1', 'dew_point_temperature_set_1',
+        'metar_origin_set_1', 'weather_condition_set_1d',
+        'cloud_layer_2_set_1d', 'cloud_layer_3_set_1d', 'wind_chill_set_1d',
+        'heat_index_set_1d', 'metar_set_1', 'cloud_layer_1_set_1d', 'weather_summary_set_1d'], errors='ignore')
+    df['date_time'] = pd.to_datetime(df['date_time'], utc=True)
+    # relocalize to the correct timezone
+    city_name = path.split('/')[-1].split('_')[0]
+    timezone = get_time_zone(city_name)
+    # relocalize to the correct timezone
+    df['date_time'] = df['date_time'].dt.tz_convert(timezone)
+    df['date'] = df['date_time'].dt.date
+    df['time'] = df['date_time'].dt.time
+    df['year'] = df['date_time'].dt.year
+    df['month'] = df['date_time'].dt.month
+    df['day'] = df['date_time'].dt.day
+    df['hour'] = df['date_time'].dt.hour
+    df['minute'] = df['date_time'].dt.minute
+    df['second'] = df['date_time'].dt.second
+    df['day_of_year'] = df['date_time'].dt.dayofyear
+    # sin ad cos of the day of the year
+    df['sin_day'] = np.sin(2 * np.pi * df['day_of_year']/365)
+    df['cos_day'] = np.cos(2 * np.pi * df['day_of_year']/365)
+    columns_to_one_hot = ['wind_cardinal_direction_set_1d']
+    df = pd.get_dummies(df, columns=columns_to_one_hot, dtype=int)
+    # fill na of one column sun_hours_set_1 with 0
+    try:
+        df['sun_hours_set_1'] = df['sun_hours_set_1'].fillna(0)
+    except:
+        pass
+    df = df.dropna()
+    return df
 
 def merge_daily(noaa_df, om_df):
     df = noaa_df.copy()

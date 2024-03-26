@@ -93,9 +93,9 @@ class KalshiAPI:
             order_list.append(order_dict)
         return order_list
     
-    def log_order(self, order_list, history_path):
+    def log_order(self, order_list, history_path, prediction):
         # check if 
-        expected_columns = ['date_time', 'client_order_id', 'ticker', 'subtitle', 'cap_strike', 'floor_strike', 'type', 'action', 'side', 'quantity', 'result', 'return']
+        expected_columns = ['date_time', 'client_order_id', 'ticker', 'subtitle', 'cap_strike', 'floor_strike', 'prediction', 'type', 'action', 'side', 'quantity', 'result', 'return']
         try:
             df = pd.read_csv(history_path)
         except:
@@ -121,6 +121,7 @@ class KalshiAPI:
                 order_dict['cap_strike'] = 1000
             if order_dict['floor_strike'] == None:
                 order_dict['floor_strike'] = -1000
+            order_dict['prediction'] = prediction
             order_dict['type'] = order['order_response']['order']['type']
             order_dict['action'] = order['order_response']['order']['action']
             order_dict['side'] = order['order_response']['order']['side']
@@ -134,7 +135,10 @@ class KalshiAPI:
         
     def update_old_orders(self, history_path):
         settlements = self.kalshi_api.get_portfolio_settlements()
-        df = pd.read_csv(history_path)
+        try:
+            df = pd.read_csv(history_path)
+        except:
+            return
         df['date_time'] = pd.to_datetime(df['date_time'])
 
         # look for orders that have not been created today
