@@ -10,8 +10,8 @@ class KalshiAPI:
         self.config = kalshi_python.Configuration()
         self.config.host = 'https://demo-api.kalshi.co/trade-api/v2'
         self.kalshi_api = kalshi_python.ApiInstance(
-            email='mahdouch@bu.edu',
-            password='GetHooked9165*',
+            email='',
+            password='',
             configuration=self.config,
         )
 
