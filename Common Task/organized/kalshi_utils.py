@@ -57,6 +57,25 @@ class KalshiAPI:
             cap_strike = market.cap_strike
             floor_strike = market.floor_strike
             side = None
+            # Check for both cap and floor strikes
+            if cap_strike == None and floor_strike == None:
+                # infer them from subtitle
+                subtitle = market.subtitle
+                # format 1:
+                # '45° or below'
+                if 'below' in subtitle:
+                    # get the number
+                    cap_strike = int(subtitle.split('°')[0]) + 1
+                # format 2:
+                # '54° or above'
+                elif 'above' in subtitle:
+                    # get the number
+                    floor_strike = int(subtitle.split('°')[0]) - 1
+                # format 3:
+                # 52° to 53°
+                else:
+                    floor_strike = int(subtitle.split(' ')[0].split('°')[0])
+                    cap_strike = int(subtitle.split(' ')[-1].split('°')[0])
             # Check if no floor strike
             if floor_strike == None:
                 # If prediction is less than cap_strike, create a quick buy order
@@ -117,6 +136,24 @@ class KalshiAPI:
             order_dict['subtitle'] = order['market']['subtitle']
             order_dict['cap_strike'] = order['market']['cap_strike']
             order_dict['floor_strike'] = order['market']['floor_strike']
+            if order_dict['cap_strike'] == None and order_dict['floor_strike'] == None:
+                # infer them from subtitle
+                subtitle = order['market']['subtitle']
+                # format 1:
+                # '45° or below'
+                if 'below' in subtitle:
+                    # get the number
+                    order_dict['cap_strike'] = int(subtitle.split('°')[0]) + 1
+                # format 2:
+                # '54° or above'
+                elif 'above' in subtitle:
+                    # get the number
+                    order_dict['floor_strike'] = int(subtitle.split('°')[0]) - 1
+                # format 3:
+                # 52° to 53°
+                else:
+                    order_dict['floor_strike'] = int(subtitle.split(' ')[0].split('°')[0])
+                    order_dict['cap_strike'] = int(subtitle.split(' ')[-1].split('°')[0])
             if order_dict['cap_strike'] == None:
                 order_dict['cap_strike'] = 1000
             if order_dict['floor_strike'] == None:
@@ -130,6 +167,7 @@ class KalshiAPI:
             order_dict['return'] = 0
             
             df = pd.concat([df, pd.DataFrame([order_dict])], ignore_index=True)
+            df['date_time'] = pd.to_datetime(df['date_time'], format='mixed')
             
         df.to_csv(history_path, index=False)
         
@@ -139,7 +177,7 @@ class KalshiAPI:
             df = pd.read_csv(history_path)
         except:
             return
-        df['date_time'] = pd.to_datetime(df['date_time'])
+        df['date_time'] = pd.to_datetime(df['date_time'], format='mixed')
 
         # look for orders that have not been created today
         today = datetime.now().date()
